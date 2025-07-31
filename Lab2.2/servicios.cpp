@@ -5,8 +5,36 @@
 #include <random>
 #include <iomanip>
 #include <bitset>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
 
 using namespace std;
+void enviarTramaPorSocket(const string& trama) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        cerr << "Error al crear socket." << endl;
+        return;
+    }
+
+    sockaddr_in servidor;
+    memset(&servidor, 0, sizeof(servidor));
+    servidor.sin_family = AF_INET;
+    servidor.sin_port = htons(12345); 
+    servidor.sin_addr.s_addr = inet_addr("127.0.0.1"); 
+
+    if (connect(sock, (sockaddr*)&servidor, sizeof(servidor)) < 0) {
+        cerr << "Error al conectar al receptor." << endl;
+        close(sock);
+        return;
+    }
+
+    send(sock, trama.c_str(), trama.size(), 0);
+    cout << "Trama enviada al receptor por socket." << endl;
+    close(sock);
+}
+
 
 class HammingAlgorithm {
 private:
@@ -117,7 +145,6 @@ public:
     }
 };
 
-// Capa de Aplicación
 class ApplicationLayer {
 public:
     pair<string, string> solicitarMensaje() {
@@ -142,7 +169,6 @@ public:
 class PresentationLayer {
 public:
     string codificarMensaje(const string& mensaje) {
-        cout << "\n=== CAPA DE PRESENTACIÓN ===" << endl;
         cout << "Codificando mensaje en ASCII binario..." << endl;
         
         string mensajeBinario = "";
@@ -153,10 +179,10 @@ public:
             string charBinario = binario.to_string();
             mensajeBinario += charBinario;
             
-            cout << "[PRESENTACIÓN] '" << c << "' (ASCII " << (int)c << ") -> " << charBinario << endl;
+            cout << "Mensaje'" << c << "' (ASCII " << (int)c << ") -> " << charBinario << endl;
         }
         
-        cout << "[PRESENTACIÓN] Mensaje completo en binario: " << mensajeBinario << endl;
+        cout << "Mensaje completo en binario: " << mensajeBinario << endl;
         return mensajeBinario;
     }
 };
@@ -167,11 +193,16 @@ private:
     
 public:
     string calcularIntegridad(const string& datos, const string& algoritmo) {
-        cout << "\n=== CAPA DE ENLACE ===" << endl;
         
         if (algoritmo == "hamming") {
             cout << "Aplicando algoritmo de Hamming..." << endl;
-            return hamming.encodeHamming(datos);
+            string resultado = "";
+            for (size_t i = 0; i < datos.length(); i += 8) {
+                string bloque = datos.substr(i, 8);
+                resultado += hamming.encodeHamming(bloque);
+            }
+            return resultado;
+
         } else {
             cout << "Algoritmo no reconocido, usando datos sin modificar" << endl;
             return datos;
@@ -249,6 +280,8 @@ public:
         
         double tasaError = noise.solicitarTasaError();
         string tramaConRuido = noise.aplicarRuido(tramaConIntegridad, tasaError);
+        enviarTramaPorSocket(tramaConRuido);
+
         
         pair<bool, string> resultado = dataLink.verificarIntegridad(tramaConRuido, algoritmo);
         bool tieneError = resultado.first;
